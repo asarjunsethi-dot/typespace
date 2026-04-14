@@ -1,0 +1,482 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+// --- Inline SVG Icons to prevent dependency errors ---
+const IconDownload = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+);
+const IconVolume2 = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+);
+const IconVolumeX = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+);
+const IconType = ({ size = 16 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+);
+const IconClock = ({ size = 16 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+);
+const IconHash = ({ size = 16 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+);
+const IconBookOpen = ({ size = 16 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+);
+const IconMenu = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+);
+const IconTrash = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+);
+const IconEdit = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+);
+const IconPlus = ({ size = 20 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+);
+
+// --- Safe LocalStorage Wrappers ---
+const safeGetStorage = (key) => {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+};
+const safeSetStorage = (key, value) => {
+  try { localStorage.setItem(key, value); } catch (e) { /* ignore in restricted iframes */ }
+};
+
+export default function App() {
+  // --- State Management ---
+  const [view, setView] = useState('menu');
+  const [drafts, setDrafts] = useState([]);
+  const [activeDraftId, setActiveDraftId] = useState(null);
+  const [draftToDelete, setDraftToDelete] = useState(null);
+  
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [wordCount, setWordCount] = useState(0);
+  const [charCount, setCharCount] = useState(0);
+  const [readTime, setReadTime] = useState('0 min');
+  const [writingTime, setWritingTime] = useState(0);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  
+  // Refs
+  const textareaRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const audioCtxRef = useRef(null);
+
+  // --- Initialization & Local Storage ---
+  useEffect(() => {
+    // Load saved drafts
+    const savedDraftsStr = safeGetStorage('blanksheet_drafts');
+    let loadedDrafts = [];
+    if (savedDraftsStr) {
+      try { loadedDrafts = JSON.parse(savedDraftsStr); } catch (e) {}
+    }
+
+    // Migrate old legacy text to a draft if needed
+    const legacyText = safeGetStorage('blanksheet_text');
+    if (loadedDrafts.length === 0 && legacyText) {
+      loadedDrafts = [{
+        id: Date.now().toString(),
+        text: legacyText,
+        writingTime: parseInt(safeGetStorage('blanksheet_time') || '0', 10),
+        updatedAt: Date.now()
+      }];
+      safeSetStorage('blanksheet_drafts', JSON.stringify(loadedDrafts));
+    }
+    
+    setDrafts(loadedDrafts);
+
+    const savedSound = safeGetStorage('blanksheet_sound');
+    if (savedSound === 'enabled') setSoundEnabled(true);
+
+    // Auto-focus on load
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      resizeTextarea();
+    }
+    
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, []);
+
+  // --- Auto-Save & Metrics Calculation ---
+  useEffect(() => {
+    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    setWordCount(words);
+    setCharCount(text.length);
+    
+    if (words === 0) {
+      setReadTime('0 min');
+    } else if (words < 200) {
+      setReadTime('< 1 min');
+    } else {
+      setReadTime(`${Math.ceil(words / 200)} min`);
+    }
+
+    // Automatically assign an ID if typing starts without one
+    if ((text.length > 0 || title.length > 0) && !activeDraftId) {
+      setActiveDraftId(Date.now().toString());
+    }
+
+    // Auto-save to drafts array
+    if (activeDraftId) {
+      setDrafts(prev => {
+        const updated = [...prev];
+        const idx = updated.findIndex(d => d.id === activeDraftId);
+        const current = idx >= 0 ? updated[idx] : null;
+
+        // Skip if identical to prevent thrashing
+        if (current && current.text === text && current.title === title && current.writingTime === writingTime) {
+          return prev;
+        }
+
+        if (idx >= 0) {
+          updated[idx] = { ...updated[idx], title, text, writingTime, updatedAt: Date.now() };
+        } else {
+          updated.push({ id: activeDraftId, title, text, writingTime, updatedAt: Date.now() });
+        }
+        safeSetStorage('blanksheet_drafts', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [title, text, writingTime, activeDraftId]);
+
+  useEffect(() => {
+    let interval;
+    if (isTyping) {
+      interval = setInterval(() => {
+        setWritingTime((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTyping]);
+
+  useEffect(() => {
+    safeSetStorage('blanksheet_sound', soundEnabled ? 'enabled' : 'disabled');
+  }, [soundEnabled]);
+
+  // --- Audio Feedback System ---
+  const playTypewriterSound = useCallback((isEnter) => {
+    if (!soundEnabled) return;
+
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      // Soft, short boop sound: slightly higher pitch for Enter
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(isEnter ? 600 : 400, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } catch (err) {
+      console.warn("Audio blocked or unsupported.", err);
+    }
+  }, [soundEnabled]);
+
+  // --- Interaction Handlers ---
+  const formatTime = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  const resizeTextarea = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  };
+
+  const handleChange = (e) => {
+    setText(e.target.value);
+    resizeTextarea();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      playTypewriterSound(true);
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 50);
+    } else if (e.key.length === 1 || e.key === 'Backspace') {
+      playTypewriterSound(false);
+    }
+
+    setIsTyping(true);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+    }, 2500); 
+  };
+
+  const handleMouseMove = () => {
+    if (isTyping) {
+      setIsHovering(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsHovering(false);
+        setIsTyping(false);
+      }, 2500);
+    }
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BlankSheet_${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleNewDraft = () => {
+    const newId = Date.now().toString();
+    setActiveDraftId(newId);
+    setTitle('');
+    setText('');
+    setWritingTime(0);
+    setView('editor');
+    setTimeout(resizeTextarea, 50);
+  };
+
+  const handleOpenDraft = (id) => {
+    const draft = drafts.find(d => d.id === id);
+    if (draft) {
+      setActiveDraftId(draft.id);
+      setTitle(draft.title || '');
+      setText(draft.text || '');
+      setWritingTime(draft.writingTime || 0);
+      setView('editor');
+      setTimeout(resizeTextarea, 50);
+    }
+  };
+
+  const handleDeleteDraft = (e, id) => {
+    e.stopPropagation();
+    if (draftToDelete === id) {
+      const newDrafts = drafts.filter(d => d.id !== id);
+      setDrafts(newDrafts);
+      safeSetStorage('blanksheet_drafts', JSON.stringify(newDrafts));
+      if (activeDraftId === id) {
+        setActiveDraftId(null);
+        setTitle('');
+        setText('');
+        setWritingTime(0);
+      }
+      setDraftToDelete(null);
+    } else {
+      setDraftToDelete(id);
+      setTimeout(() => setDraftToDelete(null), 3000);
+    }
+  };
+
+  // --- Styles ---
+  const themeClasses = 'bg-[#FAFAFA] text-[#111111]';
+
+  const uiVisible = !isTyping || isHovering || text.length === 0;
+
+  if (view === 'menu') {
+    const sortedDrafts = [...drafts].sort((a, b) => b.updatedAt - a.updatedAt);
+
+    return (
+      <div className={`min-h-screen w-full transition-colors duration-500 ease-in-out flex flex-col items-center p-6 sm:p-12 ${themeClasses}`}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+          body { font-family: 'Space Mono', monospace; scrollbar-width: none; }
+          body::-webkit-scrollbar { display: none; }
+        `}</style>
+        
+        <div className="max-w-2xl w-full space-y-8 mt-4 sm:mt-10">
+          <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 border-b pb-6 mb-8 border-opacity-20 border-current">
+            <div>
+              <h1 className="text-2xl font-bold tracking-widest uppercase">BlankSheet</h1>
+              <p className="opacity-50 text-xs tracking-widest uppercase mt-1">Drafts & Settings</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setSoundEnabled(!soundEnabled)} 
+                className={`p-2 rounded-md border transition-all border-gray-200 hover:bg-gray-100`}
+                title="Toggle Sound"
+              >
+                {soundEnabled ? <IconVolume2 size={16} /> : <IconVolumeX size={16} />}
+              </button>
+
+              <button 
+                onClick={handleNewDraft} 
+                className={`px-4 py-2 rounded-md border flex items-center gap-2 text-sm font-bold tracking-wider uppercase transition-all border-gray-300 bg-white hover:bg-gray-50`}
+              >
+                <IconPlus size={16} /> New Draft
+              </button>
+            </div>
+          </header>
+
+          <div className="space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-widest opacity-50 mb-4">Your Drafts</h2>
+            
+            {sortedDrafts.length === 0 && (
+               <div className="text-center py-12 opacity-40 text-sm border border-dashed rounded-md border-current p-6">
+                  No drafts found. Click "New Draft" to start writing!
+               </div>
+            )}
+
+            {sortedDrafts.map(draft => {
+               const words = draft.text.trim() === '' ? 0 : draft.text.trim().split(/\s+/).length;
+               const displayTitle = draft.title || draft.text.trim().split('\n')[0] || 'Untitled Draft';
+               const isDeleteConfirm = draftToDelete === draft.id;
+
+               return (
+                <div 
+                  key={draft.id} 
+                  onClick={() => handleOpenDraft(draft.id)}
+                  className={`p-4 rounded-md border flex items-center justify-between cursor-pointer transition-all group ${activeDraftId === draft.id ? 'border-gray-400 bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}
+                >
+                  <div className="overflow-hidden pr-4 flex-grow">
+                    <h3 className="font-bold text-sm truncate">{displayTitle}</h3>
+                    <div className="text-xs opacity-50 flex items-center gap-4 mt-2">
+                      <span>{new Date(draft.updatedAt).toLocaleDateString()}</span>
+                      <span className="flex items-center gap-1"><IconType size={12}/> {words}</span>
+                      <span className="flex items-center gap-1"><IconClock size={12}/> {formatTime(draft.writingTime)}</span>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={(e) => handleDeleteDraft(e, draft.id)}
+                    className={`p-2 rounded-md transition-colors ${isDeleteConfirm ? 'bg-red-500 text-white' : 'opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500'}`}
+                  >
+                    {isDeleteConfirm ? <span className="text-[10px] font-bold uppercase">Sure?</span> : <IconTrash size={16} />}
+                  </button>
+                </div>
+               );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className={`min-h-screen w-full transition-colors duration-500 ease-in-out flex flex-col ${themeClasses}`}
+      onMouseMove={handleMouseMove}
+    >
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+        body { font-family: 'Space Mono', monospace; scrollbar-width: none; }
+        body::-webkit-scrollbar { display: none; }
+        textarea { caret-shape: block; outline: none; resize: none; }
+        textarea::placeholder {
+          color: rgba(0,0,0,0.15);
+          transition: opacity 0.2s;
+        }
+        textarea:focus::placeholder { opacity: 0; }
+      `}</style>
+
+      <main className="flex-grow flex flex-col items-center w-full relative pt-[8vh] pb-[30vh] px-6 sm:px-12">
+        {text.length === 0 && title.length === 0 && (
+          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none select-none opacity-10">
+            <span className="text-xl md:text-2xl font-bold tracking-widest uppercase text-center w-full block">Just Type.</span>
+          </div>
+        )}
+
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              playTypewriterSound(true);
+              e.preventDefault();
+              textareaRef.current?.focus();
+            } else if (e.key.length === 1 || e.key === 'Backspace') {
+              playTypewriterSound(false);
+            }
+            setIsTyping(true);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 2500);
+          }}
+          placeholder="Untitled Draft"
+          className={`w-full max-w-[700px] bg-transparent border-none overflow-hidden text-[20px] sm:text-[24px] font-bold leading-tight mb-4 outline-none text-[#111] placeholder-gray-300`}
+          spellCheck="false"
+        />
+
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Click or press Enter to start typing..."
+          className={`w-full max-w-[700px] bg-transparent border-none overflow-hidden text-[15px] sm:text-[16px] leading-[1.6] text-[#111]`}
+          spellCheck="false"
+          autoFocus
+          aria-label="Writing canvas"
+        />
+      </main>
+
+      <footer 
+        className={`fixed bottom-0 left-0 right-0 p-4 flex justify-center items-center pointer-events-none z-50`}
+      >
+        <div 
+          className={`flex items-center gap-4 px-4 py-2 rounded-md border shadow-sm backdrop-blur-md transition-all duration-700 pointer-events-auto text-sm
+            ${uiVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}
+            bg-white/90 border-gray-200
+          `}
+        >
+          <button 
+            onClick={() => setView('menu')}
+            className={`p-1.5 rounded transition-colors hover:bg-gray-100`}
+            title="All Drafts"
+          >
+            <IconMenu size={16} />
+          </button>
+
+          <div className={`w-px h-4 bg-gray-300`}></div>
+
+          <button 
+            onClick={handleExport}
+            className={`p-1.5 rounded transition-colors hover:bg-gray-100`}
+            title="Export as .txt"
+          >
+            <IconDownload size={16} />
+          </button>
+
+          <div className={`w-px h-4 mx-1 bg-gray-300`}></div>
+
+          <div className="flex items-center gap-4 opacity-70">
+            <div className="flex items-center gap-1.5" title="Word Count">
+              <IconType size={14} />
+              <span>{wordCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5" title="Active Writing Time">
+              <IconClock size={14} />
+              <span>{formatTime(writingTime)}</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
